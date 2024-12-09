@@ -1,22 +1,34 @@
+#Importing Libraries
 import pandas as pd
 import numpy as np
 from faker import Faker
 import random
 from geopy.geocoders import Nominatim
 from datetime import datetime, timedelta
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, mean_absolute_error, r2_score, davies_bouldin_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans, DBSCAN
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import seaborn as sns
+import geopandas as gpd
+import folium
+from folium.plugins import MarkerCluster
 
+#To generate fake data
 fake = Faker()
-fake_uk = Faker('en_GB')
+fake_uk = Faker('en_GB') #select UK as location
 
-# Function to generate unique 5-digit customer ID
+#Function to generate unique 5 digit customer ID
 def generate_unique_customer_id(existing_ids):
     while True:
         customer_id = fake.random_int(min=10000, max=99999)
         if customer_id not in existing_ids:
             return customer_id
 
-# Function to generate customer data
+# Function to generate the customer data
 def generate_customer_data(num_customers):
     customer_data = []
     customer_ids = []
@@ -66,47 +78,47 @@ def generate_customer_data(num_customers):
 
     return customer_data, customer_ids
 
-# Generate data
+#Generate data
 num_customers = 1000
 customer_data, customer_ids = generate_customer_data(num_customers)
 customer_df = pd.DataFrame(customer_data, columns=['customer_id', 'name', 'email', 'join_date', 'latitude', 'longitude', 'age', 'gender'])
 customer_df
 
-# Function to generate a fixed number of transactions using customer_ids from customer_df
+#Function to generate transactions using customer_id from customer_data
 def generate_transaction_data_fixed(num_transactions, customer_ids):
     transaction_data = []
     
-    # Loop through the customer_ids and generate multiple transactions for each
+    #go through each customer_id and generate multiple transactions for each customer
     for i in range(num_transactions):
-        # Randomly select a customer_id from the customer_ids list
-        customer_id = random.choice(customer_ids)  # Choose customer randomly for each transaction
+        #randomly select a customer_id from the customer_id list
+        customer_id = random.choice(customer_ids)  
         amount = round(random.uniform(10, 1000), 2)
         
-        # Introduce some outliers
-        if random.random() < 0.05:  # 5% chance to be an outlier
-            amount *= random.uniform(2, 5)  # Make it a much larger value
+        #Introducing outliers
+        if random.random() < 0.05:  # 5% outliers
+            amount *= random.uniform(2, 5)  
         
         transaction_data.append([
-            fake.uuid4(),  # transaction_id
-            customer_id,  # randomly chosen customer_id
+            fake.uuid4(),# transaction_id
+            customer_id,  
             fake.date_this_year(),
-            amount,  # possibly noisy amount
+            amount,  
             random.choice(['Electronics', 'Clothing', 'Food', 'Books']),
             random.choice(['Credit Card', 'Debit Card', 'Paypal']),
             random.randint(1, 10),  # quantity
-            round(random.uniform(1, 100), 2),  # unit_price
+            round(random.uniform(1, 100), 2),  # price
             random.choice([0, 5, 10, 15]),  # discount
             random.choice(['Completed', 'Pending', 'Failed']),
-            random.randint(1, 5)  # review_rating
+            random.randint(1, 5)  # review rating
         ])
     
     return transaction_data
 
-# Generate a fixed number of transactions (e.g., 5000 transactions)
-num_transactions = 5000  # Ensure this is the intended number of transactions
+# Generate 5000 transactions
+num_transactions = 5000  
 transaction_data = generate_transaction_data_fixed(num_transactions, customer_ids)
 
-# Create the transaction DataFrame
+#transaction data
 transaction_df = pd.DataFrame(transaction_data, columns=[
     'transaction_id', 'customer_id', 'transaction_date', 'amount', 
     'product_category', 'payment_method', 'quantity', 
@@ -114,7 +126,7 @@ transaction_df = pd.DataFrame(transaction_data, columns=[
 ])
 transaction_df
 
-# Function to generate behavioral data using customer IDs from customer_df
+#Function to generate behavioral data using customer ID from customer_data
 def generate_behavioral_data(customer_ids):
     behavioral_data = []
     for customer_id in customer_ids:
@@ -136,52 +148,42 @@ def generate_behavioral_data(customer_ids):
     return behavioral_data
 
 
-# Check the number of rows
+#Check number of rows
 print(transaction_df.shape)
 
-# Generate behavioral data using customer IDs from customer_df
+#Generate behavioral data 
 behavioral_data = generate_behavioral_data(customer_ids)
 behavioral_df = pd.DataFrame(behavioral_data, columns=['customer_id', 'last_login_date', 'total_login_count', 'pages_visited', 'time_spent_on_site', 'num_transactions', 'referral_source', 'device_used', 'average_order_value', 'promo_clicks', 'sessions_per_day', 'social_shares'])
 behavioral_df
 
-# Get the unique customer_ids from each DataFrame
+#Get the unique customer_id from each dataframe
 customer_ids_customers = set(customer_df['customer_id'])
 customer_ids_transactions = set(transaction_df['customer_id'])
 customer_ids_behavioral = set(behavioral_df['customer_id'])
 
-# Find the intersection of customer_ids between customers and transactions
+# common customer_id between customers and transactions
 common_customer_ids_customers_transactions = customer_ids_customers.intersection(customer_ids_transactions)
 common_customer_ids_customers_transactions_count = len(common_customer_ids_customers_transactions)
 
-# Find the intersection of customer_ids between customers and behavioral
+# common customer_id between customers and behavioral
 common_customer_ids_customers_behavioral = customer_ids_customers.intersection(customer_ids_behavioral)
 common_customer_ids_customers_behavioral_count = len(common_customer_ids_customers_behavioral)
 
-# Print the results
+#results
 print(f"Number of matching customer_ids between customers and transactions: {common_customer_ids_customers_transactions_count} out of {len(customer_ids_customers)}")
 print(f"Number of matching customer_ids between customers and behavioral: {common_customer_ids_customers_behavioral_count} out of {len(customer_ids_customers)}")
 
 
+#save the dataframes
 customer_df.to_csv('customers.csv', index=False)
 transaction_df.to_csv('transactions.csv', index=False)
 behavioral_df.to_csv('behavioral.csv', index=False)
 
 
 
+#RFM Analysis
 
-
-
-
-#RFM
-
-from datetime import datetime
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from sklearn.linear_model import LinearRegression
-import pandas as pd
-
-# RFM Analysis
-# Recalculate the RFM scores using transaction_df
+#calculate RFM scores using transaction_df
 transaction_df['transaction_date'] = pd.to_datetime(transaction_df['transaction_date'])
 latest_date = transaction_df['transaction_date'].max()
 
@@ -193,42 +195,41 @@ rfm_corrected = transaction_df.groupby('customer_id').agg({
 
 
 
-# Normalize the RFM values (Recency, Frequency, Monetary)
+#Normalize the RFM values 
 rfm_to_scale = rfm_corrected[['Recency', 'Frequency', 'Monetary']]
 scaler = StandardScaler()
 rfm_scaled = scaler.fit_transform(rfm_to_scale)
 
 
-# Create a new DataFrame for normalized values with clear column names
+#create a new df for normalized values
 rfm_normalized = pd.DataFrame(rfm_scaled, index=rfm_corrected.index, columns=['Recency_Normalized', 'Frequency_Normalized', 'Monetary_Normalized'])
-
 print(rfm_normalized.head())
 
-# Optionally, you can concatenate this normalized DataFrame back to your original RFM DataFrame
+#combine normalized df back to original RFM df
 rfm_final = pd.concat([rfm_corrected, rfm_normalized], axis=1)
 
-# Display the final DataFrame with both original and normalized values
+# Final df
 print(rfm_final.head())
 
 def rfm_score(df, column, bins, ascending=True):
-    # Determine the number of unique quantiles in the column
+    #determine the number of unique quantiles in the column
     unique_values = df[column].nunique()
     
-    # If there are fewer unique values than bins, reduce the number of bins
+    #if there are fewer unique values than bins, reduce the number of bins
     if unique_values < bins:
         bins = unique_values
     
-    # Define the labels based on the adjusted number of bins
+    #define the labels based on the adjusted number of bins
     labels = range(1, bins + 1) if ascending else range(bins, 0, -1)
     
     return pd.qcut(df[column], q=bins, labels=labels, duplicates='drop')
 
-# Now re-apply the scoring
+#re-apply the scoring
 rfm_corrected['R_Score'] = rfm_score(rfm_corrected, 'Recency', 5, ascending=False)
 rfm_corrected['F_Score'] = rfm_score(rfm_corrected, 'Frequency', 5)
 rfm_corrected['M_Score'] = rfm_score(rfm_corrected, 'Monetary', 5)
 
-# Combine R, F, M scores to create an RFM score
+#combine R, F, M scores to create an RFM score
 rfm_corrected['RFM_Score'] = (
     rfm_corrected['R_Score'].astype(str) +
     rfm_corrected['F_Score'].astype(str) +
@@ -238,49 +239,49 @@ rfm_corrected['RFM_Score'] = (
 print("RFM Scores DataFrame:")
 print(rfm_corrected[['Recency', 'Frequency', 'Monetary', 'R_Score', 'F_Score', 'M_Score', 'RFM_Score']])
 
-
 print("RFM Scores DataFrame:")
 print(rfm_corrected[['Recency', 'Frequency', 'Monetary', 'R_Score', 'F_Score', 'M_Score', 'RFM_Score']])
 
+#Conditions for the segmentation
 def dynamic_segment_customer(df):
     if df['R_Score'] >= 4 and df['F_Score'] >= 4 and df['M_Score'] >= 4:
-        return 'VIP'  # High Recency, Frequency, and Monetary
+        return 'VIP'  # high recency, frequency, and monetary
     elif df['R_Score'] >= 4 and df['F_Score'] >= 3 and df['M_Score'] >= 3:
-        return 'Loyal'  # High Recency, moderate Frequency, and moderate Monetary
+        return 'Loyal'  # high recency, moderate frequency, and moderate monetary
     elif df['R_Score'] >= 4 and df['F_Score'] >= 3:
-        return 'Recent'  # High Recency and moderate Frequency, regardless of spending
+        return 'Recent'  # high recency and moderate frequency, regardless of spending
     elif df['M_Score'] >= 4 and df['F_Score'] >= 3:
-        return 'Big Spender'  # High Monetary and moderate Frequency
+        return 'Big Spender'  # High monetary and moderate frequency
     elif df['R_Score'] <= 2 and df['F_Score'] <= 2 and df['M_Score'] <= 2:
-        return 'Lost'  # Low Recency, Frequency, and Monetary
+        return 'Lost'  # low recency, frequency, and monetary
     elif df['R_Score'] <= 2 and df['F_Score'] >= 3:
-        return 'At Risk'  # Low Recency but moderate Frequency
+        return 'At Risk'  # low recency but moderate frequency
     elif df['R_Score'] <= 2 and df['F_Score'] <= 2:
-        return 'About to Sleep'  # Low Recency and low Frequency
+        return 'About to Sleep'  # low Recency and low frequency
     elif df['M_Score'] <= 2 and df['F_Score'] <= 2:
-        return 'Low Spender'  # Low Monetary and low Frequency
+        return 'Low Spender'  # low monetary and low frequency
     else:
-        return 'Others'  # Catch-all for any other conditions
+        return 'Others'  #any other conditions
 
 
-# Apply the segmentation function to the rfm_corrected DataFrame
+#apply the segmentation function to the rfm_corrected DataFrame
 rfm_corrected['Segment'] = rfm_corrected.apply(dynamic_segment_customer, axis=1)
 
-# Display the segmented DataFrame
+#display the segmented df
 print(rfm_corrected[['RFM_Score', 'Segment']].head())
 
-# Reset the index of the rfm DataFrame to move 'customer_id' from index to a column
+#reset the index of the RFM df to move 'customer_id' from index to a column
 rfm = rfm_corrected.reset_index()
 print(rfm.head())
 
-# Perform the merge to join the 'Segment' from rfm to customers
+# merge to join the 'segment' from rfm to customers
 customer_df = customer_df.merge(rfm[['customer_id', 'Segment']], on='customer_id', how='left')
 
 
-# Check the result
+#Check results
 print(customer_df.head())
 
-# Count the number of customers in each segment
+#Count the number of customers in each segment
 segment_counts = rfm['Segment'].value_counts()
 
 print("Customer count by segment:\n", segment_counts)
@@ -293,13 +294,11 @@ segment_rfm_means = rfm.groupby('Segment').agg({
 
 print("\nMean RFM scores by segment:\n", segment_rfm_means)
 
-# Calculate the total Monetary value for each segment
+#calculate the total monetary value for each segment
 segment_monetary_totals = rfm.groupby('Segment')['Monetary'].sum()
 
 print("\nTotal Monetary value by segment:\n", segment_monetary_totals)
 
-
-import matplotlib.pyplot as plt
 
 # Plot the number of customers in each segment
 plt.figure(figsize=(10, 6))
@@ -309,7 +308,7 @@ plt.xlabel('Segment')
 plt.ylabel('Number of Customers')
 plt.show()
 
-import seaborn as sns
+
 
 # Plot boxplots of RFM scores by segment
 plt.figure(figsize=(15, 8))
@@ -328,20 +327,20 @@ plt.title('Monetary Score Distribution by Segment')
 plt.show()
 
 
-# Create cohort labels by binning Recency into categories directly, no need for apply()
+#create cohort labels by binning Recency into categories directly
 rfm_corrected['Cohort'] = pd.cut(
     rfm_corrected['Recency'], 
     bins=[0, 30, 90, 180, 365, 1000], 
     labels=['<30 Days', '30-90 Days', '90-180 Days', '180-365 Days', '>365 Days']
 )
 
-# Check the cohort distribution
+#check cohort distribution
 print(rfm_corrected[['Recency', 'Cohort']].head())
 
-# Group by Cohort and Segment to get the customer count for each group
+#Group by Cohort and segment to get the customer count for each group
 cohort_counts = rfm_corrected.groupby(['Cohort', 'Segment']).size().unstack(fill_value=0)
 
-# Visualize the customer distribution across cohorts and segments
+#visualize the customer distribution across cohorts and segments
 plt.figure(figsize=(10, 6))
 sns.heatmap(cohort_counts, cmap="YlGnBu", annot=True, fmt='d')
 plt.title('Customer Distribution by Cohort and Segment')
@@ -351,9 +350,7 @@ plt.show()
 
 import matplotlib.pyplot as plt
 
-
-
-# Histogram for Frequency
+# histogram for Frequency
 plt.figure(figsize=(10, 6))
 plt.hist(rfm['Frequency'], bins=20, color='lightgreen', edgecolor='black')
 plt.title('Distribution of Frequency Scores')
@@ -361,7 +358,7 @@ plt.xlabel('Frequency (number of purchases)')
 plt.ylabel('Number of Customers')
 plt.show()
 
-# Histogram for Monetary
+# histogram for Monetary
 plt.figure(figsize=(10, 6))
 plt.hist(rfm['Monetary'], bins=20, color='salmon', edgecolor='black')
 plt.title('Distribution of Monetary Scores')
@@ -371,51 +368,20 @@ plt.show()
 
 
 
-#Customer engagement and loyalty trends
 
 
-
-
-
-plt.figure(figsize=(10, 6))
-sns.boxplot(x='Segment', y='time_spent_on_site', data=rfm_behavioral)
-plt.title('Time Spent on Site by Segment')
-plt.show()
-
-plt.figure(figsize=(10, 6))
-sns.boxplot(x='Segment', y='pages_visited', data=rfm_behavioral)
-plt.title('Pages Visited by Segment')
-plt.show()
-
-
-
-from sklearn.metrics import roc_curve, auc, confusion_matrix
-fpr, tpr, thresholds = roc_curve(y_test, model.predict_proba(X_test)[:,1])
-roc_auc = auc(fpr, tpr)
-
-plt.figure(figsize=(8, 6))
-plt.plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}')
-plt.plot([0, 1], [0, 1], 'k--')
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('ROC Curve')
-plt.legend(loc="lower right")
-plt.show()
-
-
-
-# 1. Merge RFM and Behavioral DataFrames
+# merge RFM and Behavioral Dataframes
 rfm_behavioral = pd.merge(rfm, behavioral_df, on='customer_id')
 
 
-#2. Select features for clustering
+#Select features for clustering
 features = rfm_behavioral[['Recency', 'Frequency', 'Monetary', 
                            'total_login_count', 'pages_visited', 
                            'time_spent_on_site', 'num_transactions', 
                            'promo_clicks', 'sessions_per_day', 'social_shares']]
 
 
-# Calculate Loyalty Score
+#calculate loyalty score
 rfm_behavioral['Loyalty_Score'] = (
     rfm_behavioral['total_login_count'] * 0.2 + 
     rfm_behavioral['pages_visited'] * 0.3 + 
@@ -424,16 +390,16 @@ rfm_behavioral['Loyalty_Score'] = (
 print("Loyalty Score:")
 print(rfm_behavioral[['customer_id', 'Loyalty_Score']].head())
 
-# Calculate Churn Risk Score
+#calculate Churn Risk score
 rfm_behavioral['Churn_Risk_Score'] = (
-    rfm_behavioral['Recency'] * 0.5 +  # Larger recency indicates less recent activity
-    (1 / rfm_behavioral['Frequency']) * 0.3 +  # Inverse of frequency, fewer purchases indicate churn risk
-    (1 / rfm_behavioral['total_login_count']) * 0.2  # Fewer logins could indicate churn risk
+    rfm_behavioral['Recency'] * 0.5 +  #larger recency indicates less recent activity
+    (1 / rfm_behavioral['Frequency']) * 0.3 +  #inverse of frequency, fewer purchases indicate churn risk
+    (1 / rfm_behavioral['total_login_count']) * 0.2  #fewer logins could indicate churn risk
 )
 print("\nChurn Risk Score:")
 print(rfm_behavioral[['customer_id', 'Churn_Risk_Score']].head())
 
-# Calculate Monetary Value Score
+#calculate monetary value score
 rfm_behavioral['Monetary_Value_Score'] = (
     rfm_behavioral['Monetary'] * 0.7 + 
     rfm_behavioral['average_order_value'] * 0.2 + 
@@ -442,16 +408,16 @@ rfm_behavioral['Monetary_Value_Score'] = (
 print("\nMonetary Value Score:")
 print(rfm_behavioral[['customer_id', 'Monetary_Value_Score']].head())
 
-# Calculate Purchase Consistency Score
+#calculate purchase consistency score
 rfm_behavioral['Purchase_Consistency_Score'] = (
     rfm_behavioral['Frequency'] * 0.5 + 
     rfm_behavioral['num_transactions'] * 0.3 + 
-    (1 / rfm_behavioral['Recency']) * 0.2  # More recent interactions = higher score
+    (1 / rfm_behavioral['Recency']) * 0.2  #more recent interactions = higher score
 )
 print("\nPurchase Consistency Score:")
 print(rfm_behavioral[['customer_id', 'Purchase_Consistency_Score']].head())
 
-# Calculate Activity Score
+#calculate activity score
 rfm_behavioral['Activity_Score'] = (
     rfm_behavioral['total_login_count'] * 0.3 + 
     rfm_behavioral['pages_visited'] * 0.3 + 
@@ -464,49 +430,26 @@ print(rfm_behavioral[['customer_id', 'Activity_Score']].head())
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-import pandas as pd
-import numpy as np
-from sklearn.cluster import KMeans, DBSCAN
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-
-# 1. Merge RFM and Behavioral DataFrames
+#merge RFM and Behavioral DataFrames
 rfm_behavioral = pd.merge(rfm, behavioral_df, on='customer_id')
 
 
-#2. Select features for clustering
+#select features for clustering
 features = rfm_behavioral[['Recency', 'Frequency', 'Monetary', 
                            'total_login_count', 'pages_visited', 
                            'time_spent_on_site', 'num_transactions', 
                            'promo_clicks', 'sessions_per_day', 'social_shares']]
 
 
-# 3. Standardize the features
+#Standardize the features
 scaler = StandardScaler()
 features_scaled = scaler.fit_transform(features)
 
-from sklearn.decomposition import PCA
-
-# Apply PCA to reduce dimensionality
-pca = PCA(n_components=2)  # Reduce to 2 dimensions for better visualization
+#apply PCA to reduce dimensionality
+pca = PCA(n_components=2)  #reducing to 2 dimensions for better visualization
 features_pca = pca.fit_transform(features_scaled)
 
-# 4. Determine the optimal k for K-Means using the Elbow Method
+#determining the optimal k for K-Means using the Elbow method
 inertia = []
 K = range(1, 11)
 for k in K:
@@ -514,7 +457,7 @@ for k in K:
     kmeans.fit(features_pca)
     inertia.append(kmeans.inertia_)
 
-# Plot the Elbow Curve
+#plot the Elbow curve
 plt.figure(figsize=(8, 4))
 plt.plot(K, inertia, 'bo-')
 plt.xlabel('Number of clusters (k)')
@@ -522,12 +465,12 @@ plt.ylabel('Inertia')
 plt.title('Elbow Method for Optimal k After PCA')
 plt.show()
 
-# 6. Apply K-Means Clustering on PCA-reduced data
-optimal_k = 5  # Use optimal k from the elbow method
+#apply K-Means clustering on PCA reduced data
+optimal_k = 5  #use optimal k from the elbow method
 kmeans = KMeans(n_clusters=optimal_k, random_state=42)
 rfm_behavioral['KMeans_PCA_Cluster'] = kmeans.fit_predict(features_pca)
 
-# 7. Visualize K-Means Clusters after PCA
+#visualize K-Means clusters after PCA
 plt.figure(figsize=(10, 6))
 sns.scatterplot(x=features_pca[:, 0], y=features_pca[:, 1], hue=rfm_behavioral['KMeans_PCA_Cluster'], palette='Set2')
 plt.title('K-Means Clustering after PCA')
@@ -535,7 +478,7 @@ plt.xlabel('PCA Component 1')
 plt.ylabel('PCA Component 2')
 plt.show()
 
-# 8. Group data by cluster labels and calculate summary statistics for each cluster
+#group data by cluster labels and calculate summary statistics for each cluster
 cluster_analysis = rfm_behavioral.groupby('KMeans_PCA_Cluster').agg({
     'Recency': 'mean',
     'Frequency': 'mean',
@@ -546,34 +489,35 @@ cluster_analysis = rfm_behavioral.groupby('KMeans_PCA_Cluster').agg({
 })
 print(cluster_analysis)
 
-#Code to Visualize Original Features by Cluster:
+#code to Visualize Original Features by Cluster:
 
 print(rfm_behavioral)
 
-# 9. Visualize Original Features by Cluster (Recency, Frequency, and Monetary)
+#visualize original features by cluster (Recency, Frequency, Monetary)
 plt.figure(figsize=(14, 8))
 sns.boxplot(x='KMeans_PCA_Cluster', y='Recency', data=rfm_behavioral)
 plt.title('Recency by Cluster')
 plt.show()
 
 
-# Plot Frequency by cluster
+#plot frequency by cluster
 plt.figure(figsize=(14, 8))
 sns.boxplot(x='KMeans_PCA_Cluster', y='Frequency', data=rfm_behavioral)
 plt.title('Frequency by Cluster')
 plt.show()
 
-# Plot Monetary by cluster
+#plot monetary by cluster
 plt.figure(figsize=(14, 8))
 sns.boxplot(x='KMeans_PCA_Cluster', y='Monetary', data=rfm_behavioral)
 plt.title('Monetary by Cluster')
 plt.show()
 
-from sklearn.metrics import silhouette_score, davies_bouldin_score
 
-# Silhouette Score
+
+#Silhouette Score
 silhouette_avg = silhouette_score(features_pca, rfm_behavioral['KMeans_PCA_Cluster'])
 print(f"Silhouette Score: {silhouette_avg}")
+
 # Davies-Bouldin Index
 davies_bouldin_avg = davies_bouldin_score(features_pca, rfm_behavioral['KMeans_PCA_Cluster'])
 print(f"Davies-Bouldin Index: {davies_bouldin_avg}")
@@ -582,24 +526,26 @@ print(f"Davies-Bouldin Index: {davies_bouldin_avg}")
 
 
 
+#Print High value cutomers based on Kmeans clusters
 
+#Ensuring that RFM_Score is treated as a string before filtering
+rfm_behavioral['RFM_Score'] = rfm_behavioral['RFM_Score'].astype(str)
 
-# Ensure that RFM_Score is treated as a string before filtering
-#rfm_behavioral['RFM_Score'] = rfm_behavioral['RFM_Score'].astype(str)
+#criteria for high-value customers 
+high_value_customers = rfm_behavioral[rfm_behavioral['RFM_Score'] == '555']  
 
-# 11. High-Value Customer Identification based on RFM_Score
+# high-Value customer identification based on RFMScore
 print("RFM_Score value counts:")
 print(rfm_behavioral['RFM_Score'].value_counts())
 
-# Print the high-value customers' details
+#print the high-value customers details
 print("High-Value Customers (RFM_Score '555'):")
 print(high_value_customers[['customer_id', 'Monetary', 'Frequency', 'RFM_Score', 'KMeans_PCA_Cluster']])
 
 
-# Export high-value customer list to CSV for marketing purposes
-#high_value_customers.to_csv('high_value_customers.csv', index=False)
 
-# DBSCAN Clustering
+
+#DBSCAN Clustering
 dbscan = DBSCAN(eps=0.25, min_samples=5)  # Adjust eps and min_samples as needed
 rfm_behavioral['DBSCAN_PCA_Cluster'] = dbscan.fit_predict(features_pca)
 
@@ -610,7 +556,7 @@ plt.xlabel('PCA Component 1')
 plt.ylabel('PCA Component 2')
 plt.show()
 
-# 19. Calculate Silhouette Score and Davies-Bouldin Index for DBSCAN clusters (if more than one cluster exists)
+#calculate Silhouette Score and Davies-Bouldin Index for DBSCAN clusters (if more than one cluster exists)
 if len(non_noise_clusters) > 1:
     filtered_data = features_pca[rfm_behavioral['DBSCAN_PCA_Cluster'] != -1]
     filtered_labels = rfm_behavioral['DBSCAN_PCA_Cluster'][rfm_behavioral['DBSCAN_PCA_Cluster'] != -1]
@@ -623,26 +569,25 @@ if len(non_noise_clusters) > 1:
 else:
     print("Not enough clusters (or too many noise points) to calculate Silhouette Score or Davies-Bouldin Index for DBSCAN after PCA.")
 
-# 13. Add DBSCAN labels to high-value customers
+#Add DBSCAN labels to high-value customers
 high_value_customers = high_value_customers.copy()
 high_value_customer_indices = rfm_behavioral.index.isin(high_value_customers.index)
 high_value_dbscan_labels = dbscan.labels_[high_value_customer_indices]
 high_value_customers['DBSCAN_Label'] = high_value_dbscan_labels
 
-# -1 represents noise/outliers detected by DBSCAN
+#-1 represents noise/outliers detected by DBSCAN
 outliers = high_value_customers[high_value_customers['DBSCAN_Label'] == -1]
 print("Outliers (Detected by DBSCAN):")
 print(outliers[['customer_id', 'Monetary', 'Frequency', 'RFM_Score', 'KMeans_PCA_Cluster', 'DBSCAN_Label']])
 
 
-# Non-outliers (not labeled as noise)
+#non outliers (not labeled as noise)
 non_outliers = high_value_customers[high_value_customers['DBSCAN_Label'] != -1]
 print("Non-Outliers (Detected by DBSCAN):")
 print(non_outliers[['customer_id', 'Monetary', 'Frequency', 'RFM_Score', 'KMeans_PCA_Cluster', 'DBSCAN_Label']])
 
 
-
-# 15. Visualize High-Value Customers with DBSCAN Labels
+#visualize high Value customers with DBSCAN labels
 features_scaled_high_value = features_scaled[high_value_customer_indices]
 dbscan_labels_high_value = dbscan.labels_[high_value_customer_indices]
 
@@ -655,22 +600,22 @@ plt.show()
 
 
 
-# 16. Visualize High-Value Customers in K-Means Clusters
+#visualize high value customers in K-Means clusters
 plt.figure(figsize=(10, 6))
 sns.scatterplot(x=features_pca[:, 0], y=features_pca[:, 1], hue=rfm_behavioral['KMeans_PCA_Cluster'], palette='Set2')
 plt.title('High-Value Customers in K-Means Clusters')
 plt.xlabel('PCA Component 1')
 plt.ylabel('PCA Component 2')
 
-# Highlight high-value customers
+# highlight high-value customers
 for idx, row in high_value_customers.iterrows():
     plt.scatter(features_pca[idx, 0], features_pca[idx, 1], color='red')
 plt.show()
 
-# Identify noisy customers (outliers) detected by DBSCAN
+#identify noisy customers (outliers) detected by DBSCAN
 noisy_customers = rfm_behavioral[rfm_behavioral['DBSCAN_PCA_Cluster'] == -1]
 
-# Ensure that 'noisy_customers' is properly defined before plotting
+#ensure that noisy_customers is properly defined before plotting
 if not noisy_customers.empty:
     plt.figure(figsize=(10, 6))
     sns.scatterplot(x=features_pca[:, 0], y=features_pca[:, 1], hue=rfm_behavioral['DBSCAN_PCA_Cluster'], palette='Set1')
@@ -689,125 +634,36 @@ else:
 
 
 
-from sklearn.decomposition import PCA
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.metrics import silhouette_score, davies_bouldin_score
-
-# Loop over different numbers of PCA components
-for n_components in range(2, 11):  # You can adjust this range as needed
-
-    # Perform PCA with n_components
-    pca = PCA(n_components=n_components)
-    features_pca = pca.fit_transform(features_scaled)  # Assuming original_data is your dataset
-
-    # Perform KMeans clustering
-    kmeans = KMeans(n_clusters=5)  # Adjust the number of clusters as needed
-    kmeans_labels = kmeans.fit_predict(features_pca)
-
-    # Perform DBSCAN clustering
-    dbscan = DBSCAN(eps=0.25, min_samples=5)  # Adjust hyperparameters as needed
-    dbscan_labels = dbscan.fit_predict(features_pca)
-
-    # Filter out noise points from DBSCAN (-1 label)
-    non_noise_clusters = dbscan_labels[dbscan_labels != -1]
-
-    # Evaluate Silhouette and Davies-Bouldin for KMeans
-    silhouette_kmeans = silhouette_score(features_pca, kmeans_labels)
-    davies_bouldin_kmeans = davies_bouldin_score(features_pca, kmeans_labels)
-
-    print(f"KMeans -> Components: {n_components} | Silhouette Score: {silhouette_kmeans:.4f} | Davies-Bouldin Index: {davies_bouldin_kmeans:.4f}")
-
-    # Evaluate Silhouette and Davies-Bouldin for DBSCAN only if there are more than 1 cluster
-    if len(set(non_noise_clusters)) > 1:
-        silhouette_dbscan = silhouette_score(features_pca[dbscan_labels != -1], dbscan_labels[dbscan_labels != -1])
-        davies_bouldin_dbscan = davies_bouldin_score(features_pca[dbscan_labels != -1], dbscan_labels[dbscan_labels != -1])
-
-        print(f"DBSCAN -> Components: {n_components} | Silhouette Score: {silhouette_dbscan:.4f} | Davies-Bouldin Index: {davies_bouldin_dbscan:.4f}")
-    else:
-        print(f"DBSCAN -> Components: {n_components} | Not enough clusters to calculate Silhouette/Davies-Bouldin")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # CLV prediction
 
 
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
-
-# 1. Prepare the Data
+#Prepare the Data
 # CLV will be predicted based on RFM scores and behavioral metrics
 features = rfm_behavioral[['Recency', 'Frequency', 
                            'total_login_count', 'pages_visited', 
                            'time_spent_on_site', 'num_transactions', 
                            'promo_clicks', 'sessions_per_day', 'social_shares']]
 
-# The target variable (CLV) will be the 'Monetary' value for simplicity, 
-# but you might want to define CLV differently depending on your use case
+#the target variable (CLV) will be the 'Monetary' value. 
 target = rfm_behavioral['Monetary']
 
-# 2. Train/Test Split
+#Train/Test Split
 X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
 
 
-# 3. Modeling
+#modeling
 model = LinearRegression()
 model.fit(X_train, y_train)
 
-# 4. Predict and Evaluate
+#predict and Evaluate
 y_pred = model.predict(X_test)
 rfm_behavioral['CLV_Prediction'] = model.predict(features)
 
-# Display the DataFrame with CLV predictions
+#display the Dataframe with CLV predictions
 print(rfm_behavioral[['Recency', 'Frequency', 'Monetary', 'CLV_Prediction']].head())
 
 
-# Evaluate the model
+#evaluate the model
 mae = mean_absolute_error(y_test, y_pred)
 r2 = r2_score(y_test, y_pred)
 
@@ -817,83 +673,73 @@ print(f"R-Squared: {r2}")
 
 
 
+#Geospatial Analysis
 
-
-
-
-import pandas as pd
-import geopandas as gpd
-import folium
-from folium.plugins import MarkerCluster
-
-
-
-# Convert the DataFrame to a GeoDataFrame
+#convert the Dataframe to a GeoDataFrame
 gdf = gpd.GeoDataFrame(customer_df, 
                        geometry=gpd.points_from_xy(customer_df.longitude, customer_df.latitude))
 
 
-# Set the coordinate reference system (CRS)
+#set the coordinate reference system (CRS)
 gdf.set_crs(epsg=4326, inplace=True)  # WGS84 Lat/Long
 
 
-# Check if GeoDataFrame is correctly formed
+#check if GeoDataFrame is correctly formed
 print(gdf.head())
 
 
-# Filter high-value customers (e.g., VIP segment)
+#filter high-value customers (VIP segment)
 high_value_customers = gdf[gdf['Segment'] == 'VIP']
 
 
-# Convert latitude and longitude columns to numeric
+#convert latitude and longitude columns to numeric
 customer_df['latitude'] = pd.to_numeric(customer_df['latitude'], errors='coerce')
 customer_df['longitude'] = pd.to_numeric(customer_df['longitude'], errors='coerce')
 
 
-# Create a base map centered around the mean latitude and longitude of the customers
+#create a base map centered around the mean latitude and longitude of the customers
 mean_lat = customer_df['latitude'].mean()
 mean_lon = customer_df['longitude'].mean()
 m = folium.Map(location=[mean_lat, mean_lon], zoom_start=6)
 
-# Add customer locations to the map
+#define a color map for each segment
+segment_color_map = {
+    'VIP': 'pink',
+    'Loyal': 'green',
+    'At Risk': 'orange',
+    'Lost': 'yellow',
+    'Big Spender': 'purple',
+    'Low Spender': 'blue',
+    'Others': 'lightgray'  # or any other segment
+}
+
+#add customer locations to the map with unique colors for each segment
 marker_cluster = MarkerCluster().add_to(m)
 for idx, row in gdf.iterrows():
-    folium.Marker(location=[row['latitude'], row['longitude']],
-                  popup=f"Customer ID: {row['customer_id']}\nSegment: {row['Segment']}",
-                  icon=folium.Icon(color='blue' if row['Segment'] != 'VIP' else 'red')
-                  ).add_to(marker_cluster)
+    # Get the color for the customer segment from the color map
+    segment_color = segment_color_map.get(row['Segment'], 'lightgray')  # Default color if segment not found
+    
+    folium.Marker(
+        location=[row['latitude'], row['longitude']],
+        popup=f"Customer ID: {row['customer_id']}\nSegment: {row['Segment']}",
+        icon=folium.Icon(color=segment_color)
+    ).add_to(marker_cluster)
 
-# Highlight high-value customers in a different color
+#highlight high-value customers in a different color
 for idx, row in high_value_customers.iterrows():
     folium.Marker(location=[row['latitude'], row['longitude']],
                   popup=f"High-Value Customer ID: {row['customer_id']}\nSegment: {row['Segment']}",
                   icon=folium.Icon(color='red', icon='star')
                   ).add_to(m)
 
-# Save the map to an HTML file
+#save the map to an HTML file
 m.save('customer_distribution_map.html')
-
 
 m
 
-#####1. Customer Profiling and Insights
+#Customer Profiling and Insights
 
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-
-
-# Demographic profiling by Segment
-# Analyze Age Distribution by Segment
-plt.figure(figsize=(10, 6))
-sns.boxplot(x='Segment', y='age', data=customer_df)
-plt.title('Age Distribution by Segment')
-plt.show()
-
-
-
-# Analyze Gender Distribution by Segment
+# analyze gender distribution by segment
 plt.figure(figsize=(10, 6))
 sns.countplot(x='Segment', hue='gender', data=customer_df)
 plt.title('Gender Distribution by Segment')
@@ -901,83 +747,20 @@ plt.show()
 
 
 
-# Purchase behavior profiling by Segment
-# Analyzing average amount spent per segment
+# Purchase behavior profiling by segment
+# analyzing average amount spent per segment
 avg_spend_per_segment = rfm_corrected.groupby('Segment')['Monetary'].mean()
 print("Average Spend per Segment:\n", avg_spend_per_segment)
 
 
 
-# Visualize average amount spent per segment
+# visualize average amount spent per segment
 plt.figure(figsize=(10, 6))
 avg_spend_per_segment.plot(kind='bar', color='coral')
 plt.title('Average Spend per Segment')
 plt.xlabel('Segment')
 plt.ylabel('Average Monetary Value')
 plt.show()
-
-
-
-
-
-########Actionable Recommendations
-
-# Example: Simple recommendations based on segments
-recommendations = {
-    'VIP': 'Offer exclusive rewards and personalized services to retain these high-value customers.',
-    'Loyal': 'Consider loyalty programs and retention campaigns.',
-    'Recent': 'Encourage repeat purchases with follow-up emails and discounts.',
-    'Big Spender': 'Upsell high-value products or bundles.',
-    'At Risk': 'Engage with targeted campaigns to prevent churn.',
-    'Lost': 'Attempt re-engagement through special offers or feedback requests.'
-}
-
-
-
-# Apply recommendations to each segment
-customer_df['Recommendation'] = customer_df['Segment'].map(recommendations)
-print(customer_df[['customer_id', 'Segment', 'Recommendation']].head())
-
-
-
-##A/B Testing Framework 
-
-customer_df['Test_Group'] = np.random.choice(['Control', 'Test'], size=len(customer_df), p=[0.5, 0.5])
-
-# If 'customer_id' is the index, reset the index to make it a column
-if 'customer_id' not in rfm_corrected.columns:
-    rfm_corrected = rfm_corrected.reset_index()  # This will move 'customer_id' from index to a column
-
-
-# Assuming rfm_corrected has been calculated and contains the 'Frequency' column
-customer_df = customer_df.merge(rfm_corrected[['customer_id', 'Frequency']], on='customer_id', how='left')
-
-customer_df['Post_Campaign_Frequency'] = customer_df.apply(
-    lambda x: x['Frequency'] + np.random.randint(0, 3) if x['Test_Group'] == 'Test' else x['Frequency'],
-    axis=1
-)
-
-# Analyze the results
-control_group = customer_df[customer_df['Test_Group'] == 'Control']['Post_Campaign_Frequency']
-test_group = customer_df[customer_df['Test_Group'] == 'Test']['Post_Campaign_Frequency']
-
-
-print(f"Control Group Mean: {control_group.mean()}")
-print(f"Test Group Mean: {test_group.mean()}")
-
-from scipy.stats import ttest_ind
-
-# T-Test to compare means between control and test groups
-t_stat, p_value = ttest_ind(control_group, test_group)
-print(f"T-Stat: {t_stat}, P-Value: {p_value}")
-
-
-
-
-
-
-
-
 
 
 
